@@ -1,12 +1,23 @@
 import os
 from threading import Thread
-import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    TextIteratorStreamer
-)
-from peft import PeftModel
+
+try:
+    import torch
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        TextIteratorStreamer
+    )
+    LOCAL_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    LOCAL_TRANSFORMERS_AVAILABLE = False
+
+try:
+    from peft import PeftModel
+    PEFT_AVAILABLE = True
+except ImportError:
+    PeftModel = None
+    PEFT_AVAILABLE = False
 
 try:
     from dotenv import load_dotenv
@@ -80,6 +91,8 @@ class MiniGeminiEngine:
             self._init_local_model(model_name, lora_dir, use_lora)
 
     def _init_local_model(self, model_name: str, lora_dir: str, use_lora: bool):
+        if not LOCAL_TRANSFORMERS_AVAILABLE:
+            raise RuntimeError("Groq API key not configured and local transformers/torch are unavailable.")
         if self.local_model is not None and self.tokenizer is not None:
             return
         print(f"[*] Initializing Local CPU Engine ({model_name})...")
@@ -94,7 +107,7 @@ class MiniGeminiEngine:
             device_map="cpu"
         )
 
-        if use_lora and os.path.exists(lora_dir):
+        if use_lora and PEFT_AVAILABLE and PeftModel is not None and os.path.exists(lora_dir):
             self.local_model = PeftModel.from_pretrained(base_model, lora_dir)
         else:
             self.local_model = base_model
